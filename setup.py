@@ -16,6 +16,7 @@ setup(
         "langchain-groq==0.3.8",
         "gunicorn==23.0.0",
         "langchain-openai==0.3.24",
-        "langchain-community==0.3.26",
+        "langchain-huggingface>=0.3.0",
+        "langchain-text-splitters>=0.3.0",
     ],
 )
