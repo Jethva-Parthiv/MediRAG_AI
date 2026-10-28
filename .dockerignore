@@ -1,0 +1,27 @@
+# Virtual environments
+venv/
+.venv/
+ENV/
+
+# Secrets & Environment variables
+.env
+*.env
+
+# Git & GitHub
+.git/
+.github/
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Local data & research
+data/*.pdf
+research/
+.pytest_cache/
+.vscode/
+.idea/
