@@ -8,7 +8,7 @@ from langchain_groq import ChatGroq
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from src.helper import download_hugging_face_embeddings
+from src.helper import get_embeddings
 from src.prompt import system_prompt
 
 app = Flask(__name__)
@@ -31,8 +31,8 @@ client = weaviate.connect_to_weaviate_cloud(
     auth_credentials=Auth.api_key(WEAVIATE_API_KEY),
 )
 
-# 2. Download embeddings model
-embeddings = download_hugging_face_embeddings()
+# 2. Initialize Portkey Gemini embeddings model
+embeddings = get_embeddings()
 
 index_name = "MediragAiDb"
 

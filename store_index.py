@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import weaviate
 from weaviate.auth import Auth
 from langchain_weaviate import WeaviateVectorStore
-from src.helper import load_pdf_file, filter_to_minimal_docs, text_split, download_hugging_face_embeddings
+from src.helper import load_pdf_file, filter_to_minimal_docs, text_split, get_embeddings
 
 load_dotenv()
 
@@ -23,9 +23,9 @@ filter_data = filter_to_minimal_docs(extracted_data)
 text_chunks = text_split(filter_data)
 print(f"Total text chunks created: {len(text_chunks)}")
 
-# 2. Load HuggingFace Embeddings model (384 dimensions)
-print("Loading HuggingFace embedding model...")
-embeddings = download_hugging_face_embeddings()
+# 2. Load Portkey Gemini Embeddings model
+print("Loading Portkey Gemini embedding model...")
+embeddings = get_embeddings()
 
 # 3. Connect to Weaviate Cloud
 print(f"Connecting to Weaviate Cloud at {WEAVIATE_URL}...")

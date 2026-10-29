@@ -16,7 +16,7 @@ A context-grounded **Medical Q&A Assistant** powered by **Retrieval-Augmented Ge
 flowchart TD
     subgraph Ingestion ["1. Document Ingestion (store_index.py)"]
         PDF["Medical Knowledge Base (PDFs in data/)"] --> Splitter["RecursiveCharacterTextSplitter (chunk: 500, overlap: 20)"]
-        Splitter --> Embed["HuggingFace Embeddings (all-MiniLM-L6-v2)"]
+        Splitter --> Embed["Portkey AI Embeddings (gemini-embedding-2)"]
         Embed --> Weaviate[("Weaviate Cloud (WCD)")]
     end
 
@@ -38,7 +38,7 @@ flowchart TD
 
 - **Context-Grounded Answers (RAG)**: Eliminates hallucinations by restricting answers strictly to verified medical reference texts.
 - **Fast LPU Inference**: Powered by **Groq** for high token-per-second conversational response times.
-- **Vector Search with Weaviate Cloud**: Scalable vector search using 384-dimensional dense semantic embeddings from `sentence-transformers/all-MiniLM-L6-v2`.
+- **Vector Search with Weaviate Cloud**: Scalable vector search using dense semantic embeddings generated via Portkey AI Gateway.
 - **Interactive Chat Interface**: Clean web interface for real-time medical question answering.
 
 ---
@@ -50,7 +50,7 @@ flowchart TD
 | **Backend Framework** | [Flask](https://flask.palletsprojects.com/) |
 | **LLM Orchestration** | [LangChain](https://www.langchain.com/) |
 | **LLM Provider** | [Groq](https://groq.com/) (`openai/gpt-oss-120b`) |
-| **Embedding Model** | Hugging Face (`sentence-transformers/all-MiniLM-L6-v2`, 384-dim) |
+| **Embedding Model** | Portkey AI Gateway (`gemini-embedding-2`) |
 | **Vector Database** | [Weaviate Cloud (WCD)](https://weaviate.io/) |
 
 ---

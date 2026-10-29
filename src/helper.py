@@ -2,9 +2,10 @@ import os
 import glob
 from typing import List
 from pypdf import PdfReader
+from portkey_ai import Portkey, PORTKEY_GATEWAY_URL
+from langchain_core.embeddings import Embeddings
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 
 
 # Extract Data From the PDF Files in a directory
@@ -55,7 +56,51 @@ def text_split(extracted_data: List[Document]) -> List[Document]:
     return text_chunks
 
 
-# Download the Embeddings from HuggingFace
-def download_hugging_face_embeddings() -> HuggingFaceEmbeddings:
-    embeddings = HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')  # 384 dimensions
-    return embeddings
+# Portkey Gemini Embeddings Implementation
+class PortkeyGeminiEmbeddings(Embeddings):
+    def __init__(
+        self,
+        api_key: str,
+        config_id: str,
+        model: str = "gemini-embedding-2",
+    ):
+        self.model = model
+        self.client = Portkey(
+            api_key=api_key,
+            config=config_id,
+            base_url=PORTKEY_GATEWAY_URL,
+        )
+
+    def embed_query(self, text: str) -> List[float]:
+        response = self.client.embeddings.create(
+            input=text,
+            model=self.model,
+        )
+        return response.data[0].embedding
+
+    def embed_documents(
+        self,
+        texts: List[str],
+    ) -> List[List[float]]:
+        return [self.embed_query(text) for text in texts]
+
+
+def get_embeddings() -> PortkeyGeminiEmbeddings:
+    api_key = os.getenv("PORTKEY_API_KEY")
+    config_id = os.getenv("PORTKEY_EMBEDDING_CONFIG_ID")
+    model = os.getenv(
+        "PORTKEY_EMBEDDING_MODEL",
+        "gemini-embedding-2",
+    )
+
+    if not api_key or not config_id:
+        raise RuntimeError(
+            "PORTKEY_API_KEY and PORTKEY_EMBEDDING_CONFIG_ID "
+            "must be configured."
+        )
+
+    return PortkeyGeminiEmbeddings(
+        api_key=api_key,
+        config_id=config_id,
+        model=model,
+    )
