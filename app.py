@@ -1,113 +1,144 @@
 import os
 import time
 import atexit
+import logging
+import warnings
+
+# Suppress internal LangChain / Pydantic deprecation warning noise in logs
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain_core")
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+warnings.filterwarnings("ignore", message=".*allowed_objects.*")
+
 import weaviate
 from weaviate.auth import Auth
 from dotenv import load_dotenv
 from flask import Flask, render_template, request
 from langchain_weaviate import WeaviateVectorStore
-from langchain_groq import ChatGroq
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
-from src.helper import get_query_embeddings
-from src.prompt import system_prompt
 
-app = Flask(__name__)
+from src.helper import get_query_embeddings
+from src.graph import create_medical_graph
 
 load_dotenv()
 
-WEAVIATE_URL = os.environ.get("WEAVIATE_URL")
-WEAVIATE_API_KEY = os.environ.get("WEAVIATE_API_KEY")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+logger = logging.getLogger(__name__)
 
-if not WEAVIATE_URL or not WEAVIATE_API_KEY or not GROQ_API_KEY:
-    raise ValueError("Missing WEAVIATE_URL, WEAVIATE_API_KEY, or GROQ_API_KEY in .env")
+app = Flask(__name__)
 
-if not WEAVIATE_URL.startswith("http"):
+# Environment configuration
+WEAVIATE_URL = os.getenv("WEAVIATE_URL")
+WEAVIATE_API_KEY = os.getenv("WEAVIATE_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+if not all([WEAVIATE_URL, WEAVIATE_API_KEY, GROQ_API_KEY]):
+    raise EnvironmentError(
+        "Missing WEAVIATE_URL, WEAVIATE_API_KEY, or GROQ_API_KEY in .env"
+    )
+
+if not WEAVIATE_URL.startswith(("http://", "https://")):
     WEAVIATE_URL = f"https://{WEAVIATE_URL}"
 
-# 1. Connect to Weaviate Cloud
-client = weaviate.connect_to_weaviate_cloud(
-    cluster_url=WEAVIATE_URL,
-    auth_credentials=Auth.api_key(WEAVIATE_API_KEY),
-    skip_init_checks=True,
-)
+
+# Weaviate Cloud connection
+client = None
 
 
-# Gracefully close the Weaviate client when worker/process terminates
-def _close_weaviate():
-    try:
-        if client and client.is_connected():
-            client.close()
-    except Exception:
-        pass
+def close_weaviate():
+    global client
+    if client is not None:
+        try:
+            if client.is_connected():
+                client.close()
+                logger.info("Weaviate connection closed.")
+        except Exception:
+            logger.exception("Error while closing Weaviate connection.")
 
 
-atexit.register(_close_weaviate)
+def initialize_weaviate():
+    global client
+    client = weaviate.connect_to_weaviate_cloud(
+        cluster_url=WEAVIATE_URL,
+        auth_credentials=Auth.api_key(WEAVIATE_API_KEY),
+        skip_init_checks=True,
+    )
+    if not client.is_connected():
+        raise ConnectionError("Unable to establish Weaviate connection.")
+    logger.info("Connected to Weaviate Cloud.")
 
-# 2. Fast direct Gemini embeddings model for user queries
+
+atexit.register(close_weaviate)
+
+
+# Initialize embeddings
 embeddings = get_query_embeddings()
 
-index_name = "MediragAiDb"
+# Initialize vector store
+INDEX_NAME = "MediragAiDb"
+initialize_weaviate()
 
-# 3. Connect to existing Weaviate vector store
 docsearch = WeaviateVectorStore(
     client=client,
-    index_name=index_name,
+    index_name=INDEX_NAME,
     text_key="text",
     embedding=embeddings,
 )
 
-retriever = docsearch.as_retriever(search_type="similarity", search_kwargs={"k": 3})
-
-# 4. Groq LLM and Prompt setup
-chatModel = ChatGroq(model="openai/gpt-oss-120b", temperature=0.4)
-prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", system_prompt),
-        ("human", "{input}"),
-    ]
+retriever = docsearch.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 3},
 )
 
-question_answer_chain = create_stuff_documents_chain(chatModel, prompt)
-rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+# Initialize compiled LangGraph workflow
+rag_graph = create_medical_graph(retriever=retriever)
 
 
-@app.route("/")
+# Flask routes
+@app.route("/", methods=["GET"])
 def index():
-    return render_template('chat.html')
+    return render_template("chat.html")
 
 
-@app.route("/get", methods=["GET", "POST"])
+@app.route("/get", methods=["POST"])
 def chat():
-    msg = request.form["msg"]
+    msg = request.form.get("msg", "").strip()
+
+    if not msg:
+        return "Please enter a question.", 400
+
     try:
-        t_total_start = time.perf_counter()
+        start_time = time.perf_counter()
 
-        # Step 1: Retrieval (Portkey Query Embedding + Weaviate Vector Search)
-        t_retrieval_start = time.perf_counter()
-        docs = retriever.invoke(msg)
-        t_retrieval = time.perf_counter() - t_retrieval_start
+        # Invoke LangGraph state graph (visualized as a full graph DAG in LangSmith)
+        final_state = rag_graph.invoke(
+            {"question": msg},
+            config={"run_name": "MediRAG_Graph_Execution"}
+        )
 
-        # Step 2: Generation (Groq LLM Synthesis)
-        t_llm_start = time.perf_counter()
-        answer = question_answer_chain.invoke({"input": msg, "context": docs})
-        t_llm = time.perf_counter() - t_llm_start
+        answer = final_state.get("answer", "No answer generated.")
+        total_time = time.perf_counter() - start_time
 
-        t_total = time.perf_counter() - t_total_start
+        logger.info(
+            "Query: %s | End-to-end graph latency: %.3fs",
+            msg[:100],
+            total_time,
+        )
 
-        print(f"\n⏱️ --- Latency Breakdown for: '{msg[:40]}...' ---")
-        print(f"  🔍 Retrieval (Direct Google AI Embed + Weaviate Search): {t_retrieval:.3f}s")
-        print(f"  🧠 LLM Generation (Groq Cloud):                         {t_llm:.3f}s")
-        print(f"  ⚡ Total Turnaround Time:                               {t_total:.3f}s")
-        print(f"Response: {answer}\n")
+        return answer
 
-        return str(answer)
-    except Exception as e:
-        print("Error:", repr(e))
-        return f"Sorry, something went wrong: {e}", 500
+    except Exception:
+        logger.exception("LangGraph pipeline execution failed.")
+        return (
+            "Sorry, something went wrong while processing your question.",
+            500,
+        )
 
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8080, debug=False)
+if __name__ == "__main__":
+    app.run(
+        host="0.0.0.0",
+        port=8080,
+        debug=False,
+    )
