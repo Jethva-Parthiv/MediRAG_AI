@@ -1,4 +1,5 @@
 import os
+import atexit
 import weaviate
 from weaviate.auth import Auth
 from dotenv import load_dotenv
@@ -30,6 +31,18 @@ client = weaviate.connect_to_weaviate_cloud(
     cluster_url=WEAVIATE_URL,
     auth_credentials=Auth.api_key(WEAVIATE_API_KEY),
 )
+
+
+# Gracefully close the Weaviate client when worker/process terminates
+def _close_weaviate():
+    try:
+        if client and client.is_connected():
+            client.close()
+    except Exception:
+        pass
+
+
+atexit.register(_close_weaviate)
 
 # 2. Initialize Portkey Gemini embeddings model
 embeddings = get_embeddings()
@@ -77,4 +90,4 @@ def chat():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=False)
