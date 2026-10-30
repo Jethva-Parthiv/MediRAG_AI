@@ -1,6 +1,8 @@
 import os
+import time
 import glob
 from typing import List
+import httpx
 from pypdf import PdfReader
 from portkey_ai import Portkey, PORTKEY_GATEWAY_URL
 from langchain_core.embeddings import Embeddings
@@ -56,6 +58,46 @@ def text_split(extracted_data: List[Document]) -> List[Document]:
     return text_chunks
 
 
+# Direct Google Gemini Embeddings (High Performance for Chat Query)
+class DirectGeminiEmbeddings(Embeddings):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gemini-embedding-2",
+    ):
+        self.api_key = api_key
+        self.model = model
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:embedContent?key={self.api_key}"
+        self.client = httpx.Client(
+            timeout=15.0,
+            limits=httpx.Limits(max_keepalive_connections=10, keepalive_expiry=60.0)
+        )
+
+    def embed_query(self, text: str) -> List[float]:
+        t0 = time.perf_counter()
+        payload = {
+            "model": f"models/{self.model}",
+            "content": {"parts": [{"text": text}]}
+        }
+        resp = self.client.post(self.url, json=payload)
+        resp.raise_for_status()
+        vec = resp.json()["embedding"]["values"]
+        elapsed = time.perf_counter() - t0
+        print(f"    [Direct Google AI] Query embedding generated in: {elapsed:.3f}s")
+        return vec
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return [self.embed_query(t) for t in texts]
+
+
+def get_query_embeddings() -> DirectGeminiEmbeddings:
+    google_api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not google_api_key:
+        raise RuntimeError("GOOGLE_API_KEY must be configured in .env for fast query embeddings.")
+    model = os.getenv("PORTKEY_EMBEDDING_MODEL", "gemini-embedding-2")
+    return DirectGeminiEmbeddings(api_key=google_api_key, model=model)
+
+
 # Portkey Gemini Embeddings Implementation
 class PortkeyGeminiEmbeddings(Embeddings):
     def __init__(
@@ -72,10 +114,13 @@ class PortkeyGeminiEmbeddings(Embeddings):
         )
 
     def embed_query(self, text: str) -> List[float]:
+        t0 = time.perf_counter()
         response = self.client.embeddings.create(
             input=text,
             model=self.model,
         )
+        elapsed = time.perf_counter() - t0
+        print(f"    [Portkey API] Query embedding generated in: {elapsed:.3f}s")
         return response.data[0].embedding
 
     def embed_documents(

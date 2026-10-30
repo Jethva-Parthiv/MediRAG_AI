@@ -1,4 +1,5 @@
 import os
+import time
 import atexit
 import weaviate
 from weaviate.auth import Auth
@@ -9,7 +10,7 @@ from langchain_groq import ChatGroq
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from src.helper import get_embeddings
+from src.helper import get_query_embeddings
 from src.prompt import system_prompt
 
 app = Flask(__name__)
@@ -30,6 +31,7 @@ if not WEAVIATE_URL.startswith("http"):
 client = weaviate.connect_to_weaviate_cloud(
     cluster_url=WEAVIATE_URL,
     auth_credentials=Auth.api_key(WEAVIATE_API_KEY),
+    skip_init_checks=True,
 )
 
 
@@ -44,8 +46,8 @@ def _close_weaviate():
 
 atexit.register(_close_weaviate)
 
-# 2. Initialize Portkey Gemini embeddings model
-embeddings = get_embeddings()
+# 2. Fast direct Gemini embeddings model for user queries
+embeddings = get_query_embeddings()
 
 index_name = "MediragAiDb"
 
@@ -81,9 +83,27 @@ def index():
 def chat():
     msg = request.form["msg"]
     try:
-        response = rag_chain.invoke({"input": msg})
-        print("Response: ", response["answer"])
-        return str(response["answer"])
+        t_total_start = time.perf_counter()
+
+        # Step 1: Retrieval (Portkey Query Embedding + Weaviate Vector Search)
+        t_retrieval_start = time.perf_counter()
+        docs = retriever.invoke(msg)
+        t_retrieval = time.perf_counter() - t_retrieval_start
+
+        # Step 2: Generation (Groq LLM Synthesis)
+        t_llm_start = time.perf_counter()
+        answer = question_answer_chain.invoke({"input": msg, "context": docs})
+        t_llm = time.perf_counter() - t_llm_start
+
+        t_total = time.perf_counter() - t_total_start
+
+        print(f"\n⏱️ --- Latency Breakdown for: '{msg[:40]}...' ---")
+        print(f"  🔍 Retrieval (Direct Google AI Embed + Weaviate Search): {t_retrieval:.3f}s")
+        print(f"  🧠 LLM Generation (Groq Cloud):                         {t_llm:.3f}s")
+        print(f"  ⚡ Total Turnaround Time:                               {t_total:.3f}s")
+        print(f"Response: {answer}\n")
+
+        return str(answer)
     except Exception as e:
         print("Error:", repr(e))
         return f"Sorry, something went wrong: {e}", 500
