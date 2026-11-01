@@ -311,6 +311,63 @@ html, body {
     border-bottom-left-radius: 4px;
 }
 
+/* Markdown styling inside bot bubble */
+.bot-bubble .markdown-body {
+    font-size: 0.94rem;
+    line-height: 1.6;
+}
+
+.bot-bubble .markdown-body p {
+    margin-bottom: 0.65rem;
+}
+
+.bot-bubble .markdown-body p:last-child {
+    margin-bottom: 0;
+}
+
+.bot-bubble .markdown-body ul,
+.bot-bubble .markdown-body ol {
+    margin: 0.35rem 0 0.65rem 1.25rem;
+    padding: 0;
+}
+
+.bot-bubble .markdown-body li {
+    margin-bottom: 0.35rem;
+}
+
+.bot-bubble .markdown-body li:last-child {
+    margin-bottom: 0;
+}
+
+.bot-bubble .markdown-body strong {
+    color: #38bdf8;
+    font-weight: 600;
+}
+
+.bot-bubble .markdown-body em {
+    color: #e2e8f0;
+}
+
+.bot-bubble .markdown-body h1,
+.bot-bubble .markdown-body h2,
+.bot-bubble .markdown-body h3,
+.bot-bubble .markdown-body h4 {
+    margin-top: 0.75rem;
+    margin-bottom: 0.4rem;
+    font-weight: 600;
+    color: #f8fafc;
+    font-size: 1.05rem;
+}
+
+.bot-bubble .markdown-body code {
+    background: rgba(15, 23, 42, 0.6);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: #38bdf8;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .error-bubble {
     background: rgba(239, 68, 68, 0.15);
     border: 1px solid rgba(239, 68, 68, 0.3);
