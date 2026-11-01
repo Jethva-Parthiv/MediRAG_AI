@@ -58,12 +58,22 @@ def get_vectorstore(client: Optional[weaviate.WeaviateClient] = None, embeddings
     )
 
 
-def get_retriever(top_k: Optional[int] = None):
-    """Factory to get the vectorstore retriever configured with top_k."""
+def get_retriever(top_k: Optional[int] = None, alpha: Optional[float] = None):
+    """
+    Factory to get the vectorstore retriever configured with Weaviate Hybrid Search.
+    Combines dense semantic vector search with BM25 lexical keyword matching.
+    - alpha = 1.0 -> Pure dense vector search
+    - alpha = 0.5 -> Equal combination of dense vector and BM25 keywords
+    - alpha = 0.0 -> Pure BM25 keyword search
+    """
     k = top_k if top_k is not None else config.top_k
+    fusion_alpha = alpha if alpha is not None else config.hybrid_alpha
     vectorstore = get_vectorstore()
     return vectorstore.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": k},
+        search_kwargs={
+            "k": k,
+            "alpha": fusion_alpha,
+        },
     )
 

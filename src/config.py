@@ -24,6 +24,7 @@ class AppConfig:
 
     # Retrieval Configuration
     top_k: int = int(os.getenv("RETRIEVER_TOP_K", "3"))
+    hybrid_alpha: float = float(os.getenv("RETRIEVER_HYBRID_ALPHA", "0.5"))
 
     # Server Configuration
     host: str = os.getenv("SERVER_HOST", "0.0.0.0")
